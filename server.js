@@ -8,6 +8,10 @@ const nse = new NseIndia();
 const app = express();
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Simple in-memory cache for historical data (5 min TTL)
+const historicalCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000;
+
 // Known indices and their charting scripcode / tokens
 const INDEX_TOKENS = {
   'NIFTY 50': '26000',
@@ -191,6 +195,12 @@ app.get('/api/historical', async (req, res) => {
     if (isNaN(start) || isNaN(end) || start > end)
       return res.status(400).json({ error: 'Pick a valid date range.' });
 
+    const cacheKey = `${symbol}:${req.query.start}:${req.query.end}`;
+    const cached = historicalCache.get(cacheKey);
+    if (cached && Date.now() - cached.ts < CACHE_TTL) {
+      return res.json({ symbol, rows: cached.rows });
+    }
+
     const byDate = new Map();
 
     if (isIndex(symbol)) {
@@ -257,6 +267,7 @@ app.get('/api/historical', async (req, res) => {
     }
 
     const rows = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+    historicalCache.set(cacheKey, { ts: Date.now(), rows });
     res.json({ symbol, rows });
   } catch (e) {
     console.error('Error fetching historical:', e.message);

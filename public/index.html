@@ -3,15 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NSE Chart — Live Price Charts</title>
-<meta name="description" content="Live NSE stock price charts with date range and intraday time selection, powered by NSE India data.">
+<title>NSE Chart — Live & Historical Price Charts</title>
+<meta name="description" content="High performance NSE stock price charts powered by TradingView Lightweight Charts and NSE India data.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
-<!-- Chart.js + financial plugin (candlestick) -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@0.2.1/dist/chartjs-chart-financial.min.js"></script>
+<!-- TradingView Lightweight Charts (Bundled locally) -->
+<script src="/lightweight-charts.js"></script>
 
 <style>
 /* ── Design tokens ─────────────────────────────────────── */
@@ -32,10 +30,6 @@
   --text:        #e2e8f8;
   --text2:       #8a9bc4;
   --text3:       #4a5a80;
-  --up:          #22c55e;
-  --dn:          #ef4444;
-  --vol-up:      rgba(34,197,94,.45);
-  --vol-dn:      rgba(239,68,68,.45);
   --radius:      14px;
   --radius-sm:   8px;
 }
@@ -52,7 +46,7 @@ body {
   overflow-x: hidden;
 }
 
-/* Animated gradient BG */
+/* Background accents */
 body::before {
   content: '';
   position: fixed;
@@ -71,7 +65,6 @@ body::before {
   display: grid;
   grid-template-columns: 360px 1fr;
   grid-template-rows: auto 1fr;
-  gap: 0;
   min-height: 100vh;
 }
 @media (max-width: 960px) {
@@ -84,7 +77,7 @@ body::before {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 14px 28px;
+  padding: 12px 28px;
   background: rgba(11,18,35,.85);
   backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--border);
@@ -99,10 +92,10 @@ body::before {
   text-decoration: none;
 }
 .logo-icon {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   background: linear-gradient(135deg, var(--accent), #7c3aed);
-  border-radius: 9px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -121,35 +114,36 @@ body::before {
 .topbar-quote {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 18px;
   margin-left: auto;
   flex-wrap: wrap;
 }
-.tq-item { font-size: 12px; color: var(--text2); line-height: 1.3; }
+.tq-item { font-size: 11px; color: var(--text2); line-height: 1.3; }
 .tq-item strong { display: block; font-size: 14px; font-weight: 600; color: var(--text); }
 .tq-item .chg-pos { color: var(--green); }
 .tq-item .chg-neg { color: var(--red); }
 .tq-badge {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 10px;
+  font-weight: 700;
   padding: 3px 8px;
   border-radius: 5px;
-  letter-spacing: .3px;
-  text-transform: uppercase;
+  letter-spacing: .5px;
+  background: rgba(34,197,94,.15);
+  color: var(--green);
+  border: 1px solid rgba(34,197,94,.3);
 }
-.badge-live { background: rgba(34,197,94,.15); color: var(--green); border: 1px solid rgba(34,197,94,.3); }
 
 /* ── Sidebar ───────────────────────────────────────────── */
 .sidebar {
   background: var(--bg2);
   border-right: 1px solid var(--border);
-  padding: 24px 20px;
+  padding: 22px 18px;
   overflow-y: auto;
-  height: calc(100vh - 61px);
+  height: calc(100vh - 57px);
   position: sticky;
-  top: 61px;
+  top: 57px;
 }
-@media (max-width: 900px) {
+@media (max-width: 960px) {
   .sidebar { height: auto; position: static; border-right: none; border-bottom: 1px solid var(--border); }
 }
 
@@ -158,14 +152,14 @@ body::before {
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: .8px;
   color: var(--text3);
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .symbol-wrap {
   position: relative;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 .symbol-wrap input {
   width: 100%;
@@ -173,10 +167,10 @@ body::before {
   border: 1.5px solid var(--border2);
   border-radius: var(--radius-sm);
   color: var(--text);
-  font: 600 17px 'Inter', sans-serif;
-  letter-spacing: .5px;
+  font: 600 15px 'Inter', sans-serif;
+  letter-spacing: .4px;
   text-transform: uppercase;
-  padding: 10px 44px 10px 14px;
+  padding: 10px 40px 10px 12px;
   transition: border-color .2s, box-shadow .2s;
   outline: none;
 }
@@ -184,14 +178,14 @@ body::before {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-glow);
 }
-.symbol-wrap input::placeholder { font-weight: 400; color: var(--text3); }
+.symbol-wrap input::placeholder { font-weight: 400; color: var(--text3); font-size: 13px; }
 .symbol-search-icon {
   position: absolute;
   right: 12px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--text3);
-  font-size: 16px;
+  font-size: 15px;
   pointer-events: none;
 }
 
@@ -204,12 +198,12 @@ body::before {
   background: #0f192d;
   border: 1.5px solid var(--border2);
   border-radius: var(--radius-sm);
-  max-height: 280px;
+  max-height: 270px;
   overflow-y: auto;
   z-index: 1000;
   box-shadow: 0 12px 36px rgba(0,0,0,.6);
 }
-.symbol-dropdown::-webkit-scrollbar { width: 6px; }
+.symbol-dropdown::-webkit-scrollbar { width: 5px; }
 .symbol-dropdown::-webkit-scrollbar-thumb { background: rgba(100,140,255,.2); border-radius: 3px; }
 .symbol-item {
   display: flex;
@@ -234,7 +228,6 @@ body::before {
   font-weight: 700;
   font-size: 13px;
   color: var(--text);
-  letter-spacing: .3px;
 }
 .symbol-item-name {
   font-size: 11px;
@@ -248,35 +241,26 @@ body::before {
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
-  padding: 2px 7px;
+  padding: 2px 6px;
   border-radius: 4px;
   flex-shrink: 0;
 }
-.type-index {
-  background: rgba(168,85,247,.18);
-  color: #c084fc;
-  border: 1px solid rgba(168,85,247,.3);
-}
-.type-equity {
-  background: rgba(79,142,255,.15);
-  color: var(--accent2);
-  border: 1px solid rgba(79,142,255,.3);
-}
+.type-index { background: rgba(168,85,247,.18); color: #c084fc; border: 1px solid rgba(168,85,247,.3); }
+.type-equity { background: rgba(79,142,255,.15); color: var(--accent2); border: 1px solid rgba(79,142,255,.3); }
 
 /* Quick chips */
 .quick-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
-  margin-top: -10px;
-  margin-bottom: 18px;
+  margin-bottom: 20px;
 }
 .quick-chip {
   background: rgba(255,255,255,.03);
   border: 1px solid var(--border);
   color: var(--text2);
   font: 500 11px 'Inter', sans-serif;
-  padding: 3px 8px;
+  padding: 4px 8px;
   border-radius: 6px;
   cursor: pointer;
   transition: all .15s;
@@ -296,7 +280,7 @@ body::before {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 4px;
-  margin-bottom: 20px;
+  margin-bottom: 18px;
 }
 .mode-btn {
   border: none;
@@ -314,15 +298,15 @@ body::before {
   box-shadow: 0 2px 10px rgba(79,142,255,.4);
 }
 
-/* Field groups */
-.field { margin-bottom: 14px; }
+/* Fields */
+.field { margin-bottom: 12px; }
 .field label {
   display: block;
   font-size: 11px;
   font-weight: 500;
   color: var(--text3);
   text-transform: uppercase;
-  letter-spacing: .7px;
+  letter-spacing: .6px;
   margin-bottom: 5px;
 }
 .field input[type="date"],
@@ -334,7 +318,6 @@ body::before {
   color: var(--text);
   font: 500 13px 'Inter', sans-serif;
   padding: 8px 12px;
-  transition: border-color .2s, box-shadow .2s;
   outline: none;
   color-scheme: dark;
 }
@@ -343,12 +326,12 @@ body::before {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-glow);
 }
-.row2 { display: grid; grid-template-columns: 1fr; gap: 8px; }
 
 /* Preset buttons */
 .presets {
   display: flex;
   gap: 6px;
+  margin-top: 10px;
   margin-bottom: 20px;
 }
 .preset-btn {
@@ -357,29 +340,29 @@ body::before {
   background: transparent;
   color: var(--text2);
   font: 600 12px 'Inter', sans-serif;
-  padding: 6px;
+  padding: 6px 0;
   border-radius: 6px;
   cursor: pointer;
   transition: all .2s;
+  text-align: center;
 }
 .preset-btn:hover, .preset-btn.active-preset {
   border-color: var(--accent);
   color: var(--accent2);
-  background: rgba(79,142,255,.08);
+  background: rgba(79,142,255,.1);
 }
 
-/* Divider */
 .divider {
   border: none;
   border-top: 1px solid var(--border);
-  margin: 18px 0;
+  margin: 16px 0;
 }
 
-/* Chart type */
+/* Chart type picker */
 .chart-type {
   display: flex;
   gap: 6px;
-  margin-bottom: 20px;
+  margin-bottom: 18px;
 }
 .ct-btn {
   flex: 1;
@@ -387,107 +370,80 @@ body::before {
   background: transparent;
   color: var(--text2);
   font: 500 12px 'Inter', sans-serif;
-  padding: 6px 4px;
+  padding: 7px 4px;
   border-radius: 6px;
   cursor: pointer;
   transition: all .2s;
-  white-space: nowrap;
+  text-align: center;
 }
-.ct-btn.active {
+.ct-btn:hover, .ct-btn.active {
   border-color: var(--accent);
   color: var(--accent2);
-  background: rgba(79,142,255,.10);
+  background: rgba(79,142,255,.1);
 }
 
-/* Go button */
 .go-btn {
   width: 100%;
-  padding: 13px;
-  background: linear-gradient(135deg, #4f8eff, #6366f1);
   border: none;
-  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, var(--accent), #6366f1);
   color: #fff;
   font: 600 14px 'Inter', sans-serif;
-  letter-spacing: .3px;
+  padding: 11px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: opacity .2s, transform .1s, box-shadow .2s;
-  box-shadow: 0 4px 20px rgba(79,142,255,.4);
-  margin-top: 4px;
+  transition: all .2s;
+  box-shadow: 0 4px 16px rgba(79,142,255,.3);
 }
-.go-btn:hover { box-shadow: 0 6px 28px rgba(79,142,255,.55); }
-.go-btn:active { transform: scale(.98); }
-.go-btn:disabled { opacity: .5; cursor: wait; }
+.go-btn:hover {
+  opacity: .95;
+  box-shadow: 0 6px 20px rgba(79,142,255,.45);
+}
+.go-btn:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
 
 .hint {
   font-size: 11px;
   color: var(--text3);
-  line-height: 1.6;
+  line-height: 1.5;
   margin-top: 14px;
 }
 
-/* ── Main chart area ───────────────────────────────────── */
+/* ── Main Area ─────────────────────────────────────────── */
 .main {
   padding: 24px 28px;
-  overflow: auto;
+  overflow-y: auto;
 }
-@media (max-width: 600px) { .main { padding: 16px; } }
-
-/* Quote strip */
-.quote-strip {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  gap: 12px;
-  margin-bottom: 22px;
-}
-.qs-card {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 14px 16px;
-  transition: border-color .2s;
-}
-.qs-card:hover { border-color: var(--border2); }
-.qs-label {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .8px;
-  color: var(--text3);
-  margin-bottom: 5px;
-}
-.qs-value {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
+@media (max-width: 600px) {
+  .main { padding: 16px; }
 }
 
-/* Headline price */
+/* Price Headline */
 .price-headline {
   display: flex;
   align-items: baseline;
   gap: 14px;
   flex-wrap: wrap;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 .sym-name {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text2);
-  background: rgba(255,255,255,.04);
+  background: rgba(255,255,255,.05);
   border: 1px solid var(--border);
   padding: 3px 10px;
   border-radius: 20px;
 }
 .price-big {
-  font-size: 38px;
+  font-size: 34px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -1px;
-  line-height: 1;
+  letter-spacing: -.8px;
 }
 .price-chg {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -496,33 +452,7 @@ body::before {
 .price-date {
   font-size: 12px;
   color: var(--text3);
-  margin-bottom: 20px;
-}
-
-/* Chart card */
-.chart-card {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 20px;
   margin-bottom: 16px;
-}
-.chart-card-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text3);
-  text-transform: uppercase;
-  letter-spacing: .7px;
-  margin-bottom: 14px;
-}
-.chart-wrap {
-  position: relative;
-  height: 380px;
-}
-.vol-wrap {
-  position: relative;
-  height: 100px;
-  margin-top: 8px;
 }
 
 /* Stat bar */
@@ -530,7 +460,7 @@ body::before {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
-  margin-bottom: 22px;
+  margin-bottom: 18px;
 }
 .stat-pill {
   display: flex;
@@ -539,7 +469,7 @@ body::before {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 20px;
-  padding: 5px 13px;
+  padding: 4px 12px;
   font-size: 12px;
 }
 .stat-pill .k { color: var(--text3); }
@@ -547,8 +477,63 @@ body::before {
 .stat-pill .v.pos { color: var(--green); }
 .stat-pill .v.neg { color: var(--red); }
 
-/* Empty / error state */
-.empty-state {
+/* Chart Card */
+.chart-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  position: relative;
+}
+.chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.chart-card-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: .7px;
+}
+.range-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text3);
+}
+.range-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+}
+
+/* Hover Legend bar */
+.chart-hover-bar {
+  display: flex;
+  gap: 14px;
+  font-size: 12px;
+  color: var(--text2);
+  margin-bottom: 8px;
+  font-variant-numeric: tabular-nums;
+  flex-wrap: wrap;
+  min-height: 20px;
+}
+.chart-hover-bar span span { color: var(--text); font-weight: 600; }
+
+.chart-wrap {
+  width: 100%;
+  height: 480px;
+  position: relative;
+}
+
+/* Empty / Error / Loading States */
+.state-box {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -557,21 +542,11 @@ body::before {
   gap: 14px;
   text-align: center;
 }
-.empty-icon {
-  font-size: 52px;
-  opacity: .3;
-}
-.empty-title { font-size: 16px; font-weight: 600; color: var(--text2); }
-.empty-sub { font-size: 13px; color: var(--text3); max-width: 340px; line-height: 1.7; }
-.error-msg { font-size: 14px; color: var(--red); max-width: 420px; line-height: 1.7; }
+.state-icon { font-size: 48px; opacity: .4; }
+.state-title { font-size: 16px; font-weight: 600; color: var(--text2); }
+.state-sub { font-size: 13px; color: var(--text3); max-width: 360px; line-height: 1.6; }
+.error-text { font-size: 14px; color: var(--red); max-width: 440px; line-height: 1.6; }
 
-/* Loader */
-.loader-wrap {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 400px;
-}
 .spinner {
   width: 40px;
   height: 40px;
@@ -581,27 +556,6 @@ body::before {
   animation: spin .7s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
-
-/* Fade-in */
-.fade-in { animation: fadeIn .4s ease both; }
-@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
-
-/* Range indicator */
-.range-indicator {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--text3);
-  margin-bottom: 14px;
-}
-.range-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 8px var(--accent);
-}
 
 [hidden] { display: none !important; }
 </style>
@@ -653,16 +607,15 @@ body::before {
       <!-- Daily controls -->
       <div id="dailyControls">
         <p class="section-title">Date Range</p>
-        <div class="row2">
-          <div class="field">
-            <label for="startDate">From</label>
-            <input type="date" id="startDate">
-          </div>
-          <div class="field">
-            <label for="endDate">To</label>
-            <input type="date" id="endDate">
-          </div>
+        <div class="field">
+          <label for="startDate">From</label>
+          <input type="date" id="startDate">
         </div>
+        <div class="field">
+          <label for="endDate">To</label>
+          <input type="date" id="endDate">
+        </div>
+
         <div class="presets">
           <button type="button" class="preset-btn" data-days="7">1W</button>
           <button type="button" class="preset-btn" data-days="30">1M</button>
@@ -675,15 +628,13 @@ body::before {
       <!-- Intraday controls -->
       <div id="intraControls" hidden>
         <p class="section-title">Time Range (IST)</p>
-        <div class="row2">
-          <div class="field">
-            <label for="timeFrom">From</label>
-            <input type="time" id="timeFrom" value="09:15">
-          </div>
-          <div class="field">
-            <label for="timeTo">To</label>
-            <input type="time" id="timeTo" value="15:30">
-          </div>
+        <div class="field">
+          <label for="timeFrom">From</label>
+          <input type="time" id="timeFrom" value="09:15">
+        </div>
+        <div class="field">
+          <label for="timeTo">To</label>
+          <input type="time" id="timeTo" value="15:30">
         </div>
       </div>
 
@@ -691,8 +642,8 @@ body::before {
 
       <p class="section-title">Chart Type</p>
       <div class="chart-type" id="chartTypePicker">
-        <button type="button" class="ct-btn active" data-type="line">Line</button>
-        <button type="button" class="ct-btn" data-type="candlestick">Candle</button>
+        <button type="button" class="ct-btn" data-type="line">Line</button>
+        <button type="button" class="ct-btn active" data-type="candlestick">Candle</button>
         <button type="button" class="ct-btn" data-type="ohlc">OHLC</button>
       </div>
 
@@ -708,22 +659,23 @@ body::before {
   <main class="main" id="mainArea">
 
     <!-- Empty state -->
-    <div class="empty-state" id="emptyState">
-      <div class="empty-icon">📊</div>
-      <div class="empty-title">Your chart will appear here</div>
-      <div class="empty-sub">Enter an NSE symbol, pick a date or time range, and click <strong>Show Chart</strong>.</div>
+    <div class="state-box" id="emptyState">
+      <div class="state-icon">📊</div>
+      <div class="state-title">Your chart will appear here</div>
+      <div class="state-sub">Select any stock or index above, pick a duration, and click <strong>Show Chart</strong>.</div>
     </div>
 
     <!-- Loading -->
-    <div class="loader-wrap" id="loader" hidden>
+    <div class="state-box" id="loader" hidden>
       <div class="spinner"></div>
+      <div class="state-title" id="loadingText">Fetching NSE market data…</div>
     </div>
 
     <!-- Error -->
-    <div class="empty-state" id="errorState" hidden>
-      <div class="empty-icon">⚠️</div>
-      <div class="empty-title">Could not load data</div>
-      <div class="error-msg" id="errorMsg"></div>
+    <div class="state-box" id="errorState" hidden>
+      <div class="state-icon">⚠️</div>
+      <div class="state-title">Could not load chart</div>
+      <div class="error-text" id="errorMsg"></div>
     </div>
 
     <!-- Chart content -->
@@ -737,26 +689,27 @@ body::before {
 
       <div class="stat-bar" id="statBar"></div>
 
-      <div class="quote-strip" id="quoteStrip" hidden></div>
+      <!-- TradingView Chart Container -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-card-title" id="chartHeaderTitle">Daily Chart</div>
+          <div class="range-indicator">
+            <span class="range-dot"></span>
+            <span id="rangeLabel"></span>
+          </div>
+        </div>
 
-      <!-- Price chart -->
-      <div class="chart-card fade-in">
-        <div class="chart-card-title" id="priceChartTitle">Price Chart</div>
-        <div class="range-indicator">
-          <span class="range-dot"></span>
-          <span id="rangeLabel"></span>
+        <!-- Crosshair hover legend -->
+        <div class="chart-hover-bar" id="hoverBar">
+          <span id="hDate"></span>
+          <span id="hOpen"></span>
+          <span id="hHigh"></span>
+          <span id="hLow"></span>
+          <span id="hClose"></span>
+          <span id="hVol"></span>
         </div>
-        <div class="chart-wrap">
-          <canvas id="priceCanvas"></canvas>
-        </div>
-      </div>
 
-      <!-- Volume chart -->
-      <div class="chart-card fade-in" id="volCard">
-        <div class="chart-card-title">Volume</div>
-        <div class="vol-wrap">
-          <canvas id="volCanvas"></canvas>
-        </div>
+        <div class="chart-wrap" id="chartWrap"></div>
       </div>
     </div>
 
@@ -767,35 +720,43 @@ body::before {
 // ── Helpers ─────────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id);
 const iso = (d) => d.toISOString().slice(0, 10);
-const inr = (v) => v == null ? '—' : '₹' + Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const inr = (v) => v == null || isNaN(v) ? '—' : '₹' + Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const istTime = (ms) => new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }).format(ms);
-const fmtVol = (v) => v >= 1e7 ? (v/1e7).toFixed(2)+'Cr' : v >= 1e5 ? (v/1e5).toFixed(2)+'L' : v >= 1000 ? (v/1000).toFixed(1)+'K' : v;
-
-// Chart.js defaults
-Chart.defaults.color = '#8a9bc4';
-Chart.defaults.borderColor = 'rgba(100,140,255,.1)';
-Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
+const fmtVol = (v) => v >= 1e7 ? (v/1e7).toFixed(2)+'Cr' : v >= 1e5 ? (v/1e5).toFixed(2)+'L' : v >= 1000 ? (v/1000).toFixed(1)+'K' : (v||0);
 
 // ── State ──────────────────────────────────────────────────────────
 let mode = 'daily';
-let chartType = 'line';
-let priceChart = null;
-let volChart = null;
+let chartType = 'candlestick';
+let tvChart = null;
+let mainSeries = null;
+let volumeSeries = null;
+let currentRows = [];
+let currentPoints = [];
 
-// ── Init dates ────────────────────────────────────────────────────
-function setRange(days) {
+// ── Date initialization ──────────────────────────────────────────
+function setRange(days, autoTrigger = false) {
   const end = new Date();
   const start = new Date(Date.now() - days * 86400000);
   $('endDate').value = iso(end);
   $('startDate').value = iso(start);
-  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active-preset'));
-  const match = [...document.querySelectorAll('.preset-btn')].find(b => +b.dataset.days === days);
-  if (match) match.classList.add('active-preset');
-}
-setRange(182);
 
+  document.querySelectorAll('.preset-btn').forEach(b => {
+    b.classList.toggle('active-preset', +b.dataset.days === days);
+  });
+
+  if (autoTrigger) {
+    $('chartForm').dispatchEvent(new Event('submit'));
+  }
+}
+
+// Initial 6M range
+setRange(182, false);
+
+// Preset button handlers
 document.querySelectorAll('.preset-btn').forEach(b => {
-  b.addEventListener('click', () => setRange(+b.dataset.days));
+  b.addEventListener('click', () => {
+    setRange(+b.dataset.days, true);
+  });
 });
 
 // ── Mode toggle ───────────────────────────────────────────────────
@@ -807,23 +768,31 @@ $('modeDaily').addEventListener('click', () => {
   $('intraControls').hidden = true;
   $('chartTypePicker').hidden = false;
   $('hintText').textContent = 'Showing daily closing prices. Select a preset or custom date range.';
+  $('chartForm').dispatchEvent(new Event('submit'));
 });
+
 $('modeIntra').addEventListener('click', () => {
   mode = 'intraday';
   $('modeIntra').classList.add('active');
   $('modeDaily').classList.remove('active');
   $('dailyControls').hidden = true;
   $('intraControls').hidden = false;
-  $('chartTypePicker').hidden = true; // intraday always line
+  $('chartTypePicker').hidden = true; // Intraday uses line
   $('hintText').textContent = 'Minute-level prices for today\'s session (IST). NSE only provides data for the current session.';
+  $('chartForm').dispatchEvent(new Event('submit'));
 });
 
-// ── Chart type ────────────────────────────────────────────────────
+// ── Chart type switch (Line / Candle / OHLC) ─────────────────────────
 document.querySelectorAll('.ct-btn').forEach(b => {
   b.addEventListener('click', () => {
     document.querySelectorAll('.ct-btn').forEach(x => x.classList.remove('active'));
     b.classList.add('active');
     chartType = b.dataset.type;
+
+    // If we already have current rows loaded, render instantly!
+    if (mode === 'daily' && currentRows.length) {
+      renderDailyChart(currentRows);
+    }
   });
 });
 
@@ -865,8 +834,7 @@ function renderDropdown(results) {
 
   symbolDropdown.querySelectorAll('.symbol-item').forEach(el => {
     el.addEventListener('click', () => {
-      const sym = el.dataset.symbol;
-      selectSymbol(sym);
+      selectSymbol(el.dataset.symbol);
     });
   });
 }
@@ -901,9 +869,7 @@ document.addEventListener('click', (e) => {
 symbolInput.addEventListener('keydown', (e) => {
   const items = symbolDropdown.querySelectorAll('.symbol-item');
   if (symbolDropdown.hidden || !items.length) {
-    if (e.key === 'ArrowDown') {
-      symbolDropdown.hidden = false;
-    }
+    if (e.key === 'ArrowDown') symbolDropdown.hidden = false;
     return;
   }
 
@@ -927,9 +893,7 @@ symbolInput.addEventListener('keydown', (e) => {
 function updateActiveDropdownItem(items) {
   items.forEach((item, idx) => {
     item.classList.toggle('active-item', idx === activeDropdownIndex);
-    if (idx === activeDropdownIndex) {
-      item.scrollIntoView({ block: 'nearest' });
-    }
+    if (idx === activeDropdownIndex) item.scrollIntoView({ block: 'nearest' });
   });
 }
 
@@ -942,28 +906,119 @@ document.querySelectorAll('.quick-chip').forEach(btn => {
 
 // ── UI state helpers ──────────────────────────────────────────────
 function showState(state) {
-  $('emptyState').hidden  = state !== 'empty';
-  $('loader').hidden      = state !== 'loading';
-  $('errorState').hidden  = state !== 'error';
+  $('emptyState').hidden   = state !== 'empty';
+  $('loader').hidden       = state !== 'loading';
+  $('errorState').hidden   = state !== 'error';
   $('chartContent').hidden = state !== 'chart';
 }
 
-// ── Destroy existing charts ───────────────────────────────────────
-function destroyCharts() {
-  if (priceChart) { priceChart.destroy(); priceChart = null; }
-  if (volChart)   { volChart.destroy();   volChart = null; }
+// ── TradingView Chart Instance Manager ────────────────────────────
+function getOrCreateChart() {
+  const container = $('chartWrap');
+  if (tvChart) {
+    return tvChart;
+  }
+
+  container.innerHTML = '';
+  tvChart = LightweightCharts.createChart(container, {
+    width: container.clientWidth || 800,
+    height: 480,
+    layout: {
+      background: { type: LightweightCharts.ColorType.Solid, color: 'transparent' },
+      textColor: '#8a9bc4',
+      fontFamily: "'Inter', system-ui, sans-serif",
+    },
+    grid: {
+      vertLines: { color: 'rgba(100, 140, 255, 0.05)' },
+      horzLines: { color: 'rgba(100, 140, 255, 0.05)' },
+    },
+    crosshair: {
+      mode: LightweightCharts.CrosshairMode.Normal,
+      vertLine: { color: 'rgba(100, 140, 255, 0.3)', width: 1, style: 2 },
+      horzLine: { color: 'rgba(100, 140, 255, 0.3)', width: 1, style: 2 },
+    },
+    rightPriceScale: {
+      borderColor: 'rgba(100, 140, 255, 0.12)',
+      visible: true,
+    },
+    timeScale: {
+      borderColor: 'rgba(100, 140, 255, 0.12)',
+      timeVisible: mode === 'intraday',
+      secondsVisible: false,
+    },
+    handleScroll: true,
+    handleScale: true,
+  });
+
+  // Crosshair hover legend
+  tvChart.subscribeCrosshairMove(param => {
+    if (!param.time || !param.seriesData || !mainSeries) {
+      clearHoverBar();
+      return;
+    }
+    const data = param.seriesData.get(mainSeries);
+    if (!data) {
+      clearHoverBar();
+      return;
+    }
+
+    let dateStr = '';
+    if (typeof param.time === 'string') {
+      dateStr = param.time;
+    } else if (typeof param.time === 'object') {
+      dateStr = `${param.time.year}-${String(param.time.month).padStart(2,'0')}-${String(param.time.day).padStart(2,'0')}`;
+    } else {
+      dateStr = new Date(param.time * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    $('hDate').innerHTML = `Date: <span>${dateStr}</span>`;
+    if (data.open !== undefined) {
+      $('hOpen').innerHTML = `O: <span>${inr(data.open)}</span>`;
+      $('hHigh').innerHTML = `H: <span>${inr(data.high)}</span>`;
+      $('hLow').innerHTML = `L: <span>${inr(data.low)}</span>`;
+      $('hClose').innerHTML = `C: <span>${inr(data.close)}</span>`;
+    } else if (data.value !== undefined) {
+      $('hClose').innerHTML = `Price: <span>${inr(data.value)}</span>`;
+      $('hOpen').innerHTML = '';
+      $('hHigh').innerHTML = '';
+      $('hLow').innerHTML = '';
+    }
+
+    if (volumeSeries) {
+      const vData = param.seriesData.get(volumeSeries);
+      if (vData && vData.value !== undefined) {
+        $('hVol').innerHTML = `Vol: <span>${fmtVol(vData.value)}</span>`;
+      }
+    }
+  });
+
+  window.addEventListener('resize', () => {
+    if (tvChart && container) {
+      tvChart.applyOptions({ width: container.clientWidth });
+    }
+  });
+
+  return tvChart;
 }
 
-// ── Fetch & render ────────────────────────────────────────────────
+function clearHoverBar() {
+  $('hDate').innerHTML = '';
+  $('hOpen').innerHTML = '';
+  $('hHigh').innerHTML = '';
+  $('hLow').innerHTML = '';
+  $('hClose').innerHTML = '';
+  $('hVol').innerHTML = '';
+}
+
+// ── Form Submit (Fetch & Render) ──────────────────────────────────
 $('chartForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const symbol = $('symbol').value.trim().toUpperCase();
+  const symbol = symbolInput.value.trim().toUpperCase();
   if (!symbol) return;
 
   $('goBtn').disabled = true;
   $('goBtn').textContent = 'Loading…';
   showState('loading');
-  destroyCharts();
 
   try {
     if (mode === 'daily') {
@@ -972,7 +1027,7 @@ $('chartForm').addEventListener('submit', async (e) => {
       await loadIntraday(symbol);
     }
   } catch (err) {
-    $('errorMsg').textContent = err.message;
+    $('errorMsg').textContent = err.message || 'Failed to load chart';
     showState('error');
   } finally {
     $('goBtn').disabled = false;
@@ -980,99 +1035,216 @@ $('chartForm').addEventListener('submit', async (e) => {
   }
 });
 
-// ── Daily chart ───────────────────────────────────────────────────
+// ── Daily Data Loader ─────────────────────────────────────────────
 async function loadDaily(symbol) {
-  const start = $('startDate').value;
-  const end   = $('endDate').value;
-  const r = await fetch(`/api/historical?symbol=${encodeURIComponent(symbol)}&start=${start}&end=${end}`);
-  const j = await r.json();
-  if (!r.ok) throw new Error(j.error);
-  if (!j.rows?.length) throw new Error('No data for this range. Try a wider range or check the symbol.');
+  let start = $('startDate').value;
+  let end   = $('endDate').value;
 
-  const rows = j.rows;
-  const labels = rows.map(x => x.date);
-  const closes = rows.map(x => x.close);
-  const opens  = rows.map(x => x.open);
-  const highs  = rows.map(x => x.high);
-  const lows   = rows.map(x => x.low);
-  const vols   = rows.map(x => x.volume);
+  // Safeguard: Ensure valid dates
+  if (!start || !end) {
+    setRange(182, false);
+    start = $('startDate').value;
+    end = $('endDate').value;
+  }
+
+  const res = await fetch(`/api/historical?symbol=${encodeURIComponent(symbol)}&start=${start}&end=${end}`);
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || 'Failed to fetch historical data');
+  if (!json.rows || !json.rows.length) throw new Error('No trading data found for this range.');
+
+  currentRows = json.rows;
+  renderDailyChart(currentRows);
+  updateLiveQuote(symbol);
+}
+
+function renderDailyChart(rows) {
+  const chart = getOrCreateChart();
+
+  // Clear previous series
+  if (mainSeries) {
+    chart.removeSeries(mainSeries);
+    mainSeries = null;
+  }
+  if (volumeSeries) {
+    chart.removeSeries(volumeSeries);
+    volumeSeries = null;
+  }
+
+  chart.applyOptions({
+    timeScale: { timeVisible: false }
+  });
+
+  // Calculate stats
+  const closes = rows.map(r => Number(r.close));
+  const highs  = rows.map(r => Number(r.high));
+  const lows   = rows.map(r => Number(r.low));
+  const vols   = rows.map(r => Number(r.volume || 0));
 
   const first = closes[0];
   const last  = closes[closes.length - 1];
   const diff  = last - first;
-  const pct   = diff / first * 100;
+  const pct   = (diff / first) * 100;
   const maxH  = Math.max(...highs);
   const minL  = Math.min(...lows);
 
-  // Headline
+  const symbol = symbolInput.value.trim().toUpperCase();
   $('symLabel').textContent = `${symbol} · NSE`;
   $('priceBig').textContent = inr(last);
   $('priceChg').textContent = `${diff >= 0 ? '+' : ''}${diff.toFixed(2)} (${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%)`;
   $('priceChg').className = 'price-chg ' + (diff >= 0 ? 'pos' : 'neg');
-  $('priceDate').textContent = `Period: ${start} → ${end}  ·  ${rows.length} trading days`;
-  $('rangeLabel').textContent = `${start} to ${end}  ·  ${rows.length} data points`;
-  $('priceChartTitle').textContent = chartType === 'line' ? 'Closing Price' : 'Price (OHLC)';
+  $('priceDate').textContent = `${rows[0].date} → ${rows[rows.length - 1].date} · ${rows.length} trading days`;
+  $('rangeLabel').textContent = `${rows.length} sessions`;
+  $('chartHeaderTitle').textContent = chartType === 'line' ? 'Closing Price (Area)' : chartType === 'ohlc' ? 'OHLC Bars' : 'Candlestick Chart';
 
-  // Stat pills
+  // Stat Pills
   renderStats([
     { k: 'High',   v: inr(maxH), cls: '' },
     { k: 'Low',    v: inr(minL), cls: '' },
     { k: 'Change', v: `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`, cls: pct >= 0 ? 'pos' : 'neg' },
-    { k: 'Points', v: rows.length, cls: '' },
-    { k: 'Volume', v: fmtVol(vols.reduce((a, b) => a + b, 0)), cls: '' },
+    { k: 'Sessions', v: rows.length, cls: '' },
+    { k: 'Total Vol', v: fmtVol(vols.reduce((a, b) => a + b, 0)), cls: '' },
   ]);
 
-  // Quote strip & Topbar live quote
-  updateLiveQuote(symbol);
-
-  // Draw charts
-  if (chartType === 'line') {
-    drawLineChart(labels, closes);
+  // Create chosen price series
+  if (chartType === 'candlestick') {
+    mainSeries = chart.addSeries(LightweightCharts.CandlestickSeries, {
+      upColor: '#22c55e',
+      downColor: '#ef4444',
+      borderVisible: false,
+      wickUpColor: '#22c55e',
+      wickDownColor: '#ef4444',
+    });
+    const candleData = rows.map(r => ({
+      time: r.date,
+      open: Number(r.open),
+      high: Number(r.high),
+      low: Number(r.low),
+      close: Number(r.close),
+    }));
+    mainSeries.setData(candleData);
+  } else if (chartType === 'ohlc') {
+    mainSeries = chart.addSeries(LightweightCharts.BarSeries, {
+      upColor: '#22c55e',
+      downColor: '#ef4444',
+    });
+    const barData = rows.map(r => ({
+      time: r.date,
+      open: Number(r.open),
+      high: Number(r.high),
+      low: Number(r.low),
+      close: Number(r.close),
+    }));
+    mainSeries.setData(barData);
   } else {
-    drawCandleChart(labels, opens, highs, lows, closes);
+    // Line / Area
+    const isUp = last >= first;
+    mainSeries = chart.addSeries(LightweightCharts.AreaSeries, {
+      topColor: isUp ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.35)',
+      bottomColor: 'rgba(0,0,0,0)',
+      lineColor: isUp ? '#22c55e' : '#ef4444',
+      lineWidth: 2,
+    });
+    const lineData = rows.map(r => ({
+      time: r.date,
+      value: Number(r.close),
+    }));
+    mainSeries.setData(lineData);
   }
-  drawVolChart(labels, vols, closes, opens);
 
-  $('volCard').hidden = false;
+  // Create Volume overlay series
+  volumeSeries = chart.addSeries(LightweightCharts.HistogramSeries, {
+    priceFormat: { type: 'volume' },
+    priceScaleId: '', // Overlay pane
+  });
+  volumeSeries.priceScale().applyOptions({
+    scaleMargins: {
+      top: 0.8, // Take bottom 20%
+      bottom: 0,
+    },
+  });
+  const volData = rows.map(r => ({
+    time: r.date,
+    value: Number(r.volume || 0),
+    color: Number(r.close) >= Number(r.open) ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)'
+  }));
+  volumeSeries.setData(volData);
+
+  chart.timeScale().fitContent();
   showState('chart');
 }
 
-// ── Intraday chart ────────────────────────────────────────────────
+// ── Intraday Data Loader ──────────────────────────────────────────
 async function loadIntraday(symbol) {
-  const r = await fetch(`/api/intraday?symbol=${encodeURIComponent(symbol)}`);
-  const j = await r.json();
-  if (!r.ok) throw new Error(j.error);
+  const res = await fetch(`/api/intraday?symbol=${encodeURIComponent(symbol)}`);
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || 'Failed to fetch intraday data');
 
   const from = $('timeFrom').value;
   const to   = $('timeTo').value;
-  const pts  = (j.points || []).filter(p => { const t = istTime(p.t); return t >= from && t <= to; });
-  if (!pts.length) throw new Error(`No intraday data between ${from} and ${to}. NSE may have ended today's session.`);
+  const pts  = (json.points || []).filter(p => {
+    const t = istTime(p.t);
+    return t >= from && t <= to;
+  });
+  if (!pts.length) throw new Error(`No intraday data between ${from} and ${to}. Market might be closed.`);
 
-  const labels = pts.map(p => istTime(p.t));
-  const prices = pts.map(p => p.price);
+  currentPoints = pts;
+  renderIntradayChart(currentPoints);
+  updateLiveQuote(symbol);
+}
+
+function renderIntradayChart(pts) {
+  const chart = getOrCreateChart();
+
+  if (mainSeries) {
+    chart.removeSeries(mainSeries);
+    mainSeries = null;
+  }
+  if (volumeSeries) {
+    chart.removeSeries(volumeSeries);
+    volumeSeries = null;
+  }
+
+  chart.applyOptions({
+    timeScale: { timeVisible: true }
+  });
+
+  const prices = pts.map(p => Number(p.price));
   const first  = prices[0];
   const last   = prices[prices.length - 1];
   const diff   = last - first;
-  const pct    = diff / first * 100;
+  const pct    = (diff / first) * 100;
 
-  $('symLabel').textContent = `${symbol} · NSE Intraday`;
+  const symbol = symbolInput.value.trim().toUpperCase();
+  $('symLabel').textContent = `${symbol} · Intraday`;
   $('priceBig').textContent = inr(last);
   $('priceChg').textContent = `${diff >= 0 ? '+' : ''}${diff.toFixed(2)} (${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%)`;
   $('priceChg').className = 'price-chg ' + (diff >= 0 ? 'pos' : 'neg');
-  $('priceDate').textContent = `Today, ${from}–${to} IST  ·  ${pts.length} data points`;
-  $('rangeLabel').textContent = `${from}–${to} IST  ·  ${pts.length} minute bars`;
-  $('priceChartTitle').textContent = 'Price (Intraday)';
+  $('priceDate').textContent = `Today, ${$('timeFrom').value}–${$('timeTo').value} IST · ${pts.length} bars`;
+  $('rangeLabel').textContent = `${pts.length} minute bars`;
+  $('chartHeaderTitle').textContent = 'Intraday Price Line';
 
   renderStats([
     { k: 'High',   v: inr(Math.max(...prices)), cls: '' },
     { k: 'Low',    v: inr(Math.min(...prices)), cls: '' },
     { k: 'Change', v: `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`, cls: pct >= 0 ? 'pos' : 'neg' },
-    { k: 'Points', v: pts.length, cls: '' },
+    { k: 'Data Bars', v: pts.length, cls: '' },
   ]);
 
-  $('quoteStrip').hidden = true;
-  $('volCard').hidden = true;
-  drawLineChart(labels, prices);
+  const isUp = last >= first;
+  mainSeries = chart.addSeries(LightweightCharts.AreaSeries, {
+    topColor: isUp ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.35)',
+    bottomColor: 'rgba(0,0,0,0)',
+    lineColor: isUp ? '#22c55e' : '#ef4444',
+    lineWidth: 2,
+  });
+
+  const lineData = pts.map(p => ({
+    time: Math.floor(p.t / 1000),
+    value: Number(p.price),
+  }));
+  mainSeries.setData(lineData);
+
+  chart.timeScale().fitContent();
   showState('chart');
 }
 
@@ -1083,177 +1255,6 @@ function renderStats(items) {
   ).join('');
 }
 
-// ── Line chart ────────────────────────────────────────────────────
-function drawLineChart(labels, values) {
-  const ctx = $('priceCanvas').getContext('2d');
-  const isUp = values[values.length - 1] >= values[0];
-  const color = isUp ? '#22c55e' : '#ef4444';
-
-  const gradient = ctx.createLinearGradient(0, 0, 0, 380);
-  gradient.addColorStop(0, isUp ? 'rgba(34,197,94,.25)' : 'rgba(239,68,68,.25)');
-  gradient.addColorStop(1, 'rgba(0,0,0,0)');
-
-  priceChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [{
-        data: values,
-        borderColor: color,
-        borderWidth: 2,
-        pointRadius: values.length > 100 ? 0 : 3,
-        pointHoverRadius: 5,
-        pointBackgroundColor: color,
-        tension: 0.15,
-        fill: true,
-        backgroundColor: gradient,
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      animation: { duration: 400, easing: 'easeOutQuart' },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: '#162035',
-          borderColor: 'rgba(100,140,255,.25)',
-          borderWidth: 1,
-          padding: 10,
-          titleColor: '#8a9bc4',
-          bodyColor: '#e2e8f8',
-          bodyFont: { weight: '600', size: 14 },
-          callbacks: { label: (c) => ' ' + inr(c.parsed.y) }
-        }
-      },
-      scales: {
-        x: {
-          ticks: { maxTicksLimit: 8, maxRotation: 0, color: '#4a5a80', font: { size: 11 } },
-          grid: { display: false },
-          border: { color: 'rgba(100,140,255,.1)' },
-        },
-        y: {
-          position: 'right',
-          ticks: { callback: (v) => '₹' + v.toLocaleString('en-IN'), color: '#4a5a80', font: { size: 11 } },
-          grid: { color: 'rgba(100,140,255,.07)' },
-          border: { color: 'rgba(100,140,255,.1)' },
-        }
-      }
-    }
-  });
-}
-
-// ── Candlestick chart ─────────────────────────────────────────────
-function drawCandleChart(labels, opens, highs, lows, closes) {
-  const ctx = $('priceCanvas').getContext('2d');
-  const data = labels.map((l, i) => ({
-    x: l,
-    o: opens[i],
-    h: highs[i],
-    l: lows[i],
-    c: closes[i],
-  }));
-
-  priceChart = new Chart(ctx, {
-    type: 'candlestick',
-    data: {
-      datasets: [{
-        label: 'Price',
-        data,
-        color: {
-          up: '#22c55e',
-          down: '#ef4444',
-          unchanged: '#8a9bc4',
-        },
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: { duration: 300 },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: '#162035',
-          borderColor: 'rgba(100,140,255,.25)',
-          borderWidth: 1,
-          padding: 10,
-          titleColor: '#8a9bc4',
-          bodyColor: '#e2e8f8',
-          callbacks: {
-            label: (c) => {
-              const d = c.raw;
-              return [
-                ` O: ${inr(d.o)}`,
-                ` H: ${inr(d.h)}`,
-                ` L: ${inr(d.l)}`,
-                ` C: ${inr(d.c)}`,
-              ];
-            }
-          }
-        }
-      },
-      scales: {
-        x: {
-          ticks: { maxTicksLimit: 8, maxRotation: 0, color: '#4a5a80', font: { size: 11 } },
-          grid: { display: false },
-          border: { color: 'rgba(100,140,255,.1)' },
-        },
-        y: {
-          position: 'right',
-          ticks: { callback: (v) => '₹' + v.toLocaleString('en-IN'), color: '#4a5a80', font: { size: 11 } },
-          grid: { color: 'rgba(100,140,255,.07)' },
-          border: { color: 'rgba(100,140,255,.1)' },
-        }
-      }
-    }
-  });
-}
-
-// ── Volume chart ──────────────────────────────────────────────────
-function drawVolChart(labels, vols, closes, opens) {
-  const ctx = $('volCanvas').getContext('2d');
-  const colors = closes.map((c, i) =>
-    c >= (opens[i] ?? c) ? 'rgba(34,197,94,.5)' : 'rgba(239,68,68,.5)'
-  );
-
-  volChart = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [{
-        data: vols,
-        backgroundColor: colors,
-        borderRadius: 2,
-        borderSkipped: false,
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: { duration: 300 },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: '#162035',
-          borderColor: 'rgba(100,140,255,.25)',
-          borderWidth: 1,
-          padding: 8,
-          callbacks: { label: (c) => ' Vol: ' + fmtVol(c.parsed.y) }
-        }
-      },
-      scales: {
-        x: { ticks: { display: false }, grid: { display: false }, border: { color: 'transparent' } },
-        y: {
-          position: 'right',
-          ticks: { callback: (v) => fmtVol(v), color: '#4a5a80', font: { size: 10 }, maxTicksLimit: 4 },
-          grid: { color: 'rgba(100,140,255,.07)' },
-          border: { color: 'rgba(100,140,255,.1)' },
-        }
-      }
-    }
-  });
 // ── Live quote in topbar ─────────────────────────────────────────
 async function updateLiveQuote(symbol) {
   const topQuote = $('topQuote');
@@ -1280,15 +1281,15 @@ async function updateLiveQuote(symbol) {
         <span>Day Range</span>
         <strong>${inr(q.low)} - ${inr(q.high)}</strong>
       </div>
-      <span class="tq-badge badge-live">● LIVE</span>
+      <span class="tq-badge">● LIVE</span>
     `;
     topQuote.hidden = false;
   } catch (e) {
-    // Silently ignore quote failures
+    // Ignore quote error
   }
 }
 
-// Initial auto-load on page start
+// ── Auto-load initial chart on page startup ──────────────────────
 window.addEventListener('DOMContentLoaded', () => {
   $('chartForm').dispatchEvent(new Event('submit'));
 });
