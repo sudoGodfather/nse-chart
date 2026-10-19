@@ -1,4 +1,4 @@
-// NSE Chart Backend — wraps stock-nse-india and exposes JSON endpoints
+// NSE Chart Backend — wraps stock-nse-india with Yahoo Finance fallback for Vercel/Cloud hosting
 const express = require('express');
 const path = require('path');
 const https = require('https');
@@ -52,43 +52,121 @@ const ALIASES = {
   'L&T': 'LT',
 };
 
-// In-memory stock directory (loaded from NSE EQUITY_L.csv)
+// Synchronously load bundled master stock list for instant search on Vercel
 let stockDirectory = [];
-
-function loadStockDirectory() {
-  const url = 'https://archives.nseindia.com/content/equities/EQUITY_L.csv';
-  https.get(url, (res) => {
-    if (res.statusCode !== 200) return;
-    let data = '';
-    res.on('data', chunk => { data += chunk; });
-    res.on('end', () => {
-      try {
-        const lines = data.split('\n');
-        const list = [];
-        for (let i = 1; i < lines.length; i++) {
-          const line = lines[i].trim();
-          if (!line) continue;
-          const parts = line.split(',');
-          const symbol = (parts[0] || '').trim();
-          const name = (parts[1] || '').trim();
-          const series = (parts[2] || '').trim();
-          if (symbol) {
-            list.push({ symbol, name, series: series || 'EQ', type: 'Equity' });
-          }
-        }
-        if (list.length > 500) {
-          stockDirectory = list;
-          console.log(`Loaded ${list.length} NSE stocks from master list.`);
-        }
-      } catch (err) {
-        console.error('Error parsing EQUITY_L.csv:', err.message);
-      }
-    });
-  }).on('error', (e) => {
-    console.warn('Could not load EQUITY_L.csv, using default stocks:', e.message);
-  });
+try {
+  stockDirectory = require('./stocks.json');
+  console.log(`Loaded ${stockDirectory.length} NSE stocks from local stocks.json.`);
+} catch (e) {
+  console.warn('Local stocks.json not found, initializing empty array.');
+  stockDirectory = [];
 }
-loadStockDirectory();
+
+// Yahoo Finance mappings for cloud environments (Vercel) where NSE blocks IPs
+const YAHOO_INDEX_MAP = {
+  'NIFTY 50': '^NSEI',
+  'NIFTY BANK': '^NSEBANK',
+  'BANKNIFTY': '^NSEBANK',
+  'NIFTY IT': '^CNXIT',
+  'NIFTY 500': '^CRSLDX',
+  'NIFTY 100': '^CNX100',
+  'NIFTY MIDCAP 100': '^NSEMDCP50',
+  'NIFTY NEXT 50': '^NSMIDCP',
+};
+
+function getYahooTicker(symbol) {
+  const s = symbol.toUpperCase().trim();
+  if (YAHOO_INDEX_MAP[s]) return YAHOO_INDEX_MAP[s];
+  if (s === 'TATAMOTORS' || s === 'TMPV' || s === 'TMCV') return 'TATAMOTORS.NS';
+  return s.replace('&', '%26') + '.NS';
+}
+
+async function fetchYahooHistorical(symbol, startDate, endDate) {
+  const ticker = getYahooTicker(symbol);
+  const fromSec = Math.floor(startDate.getTime() / 1000);
+  const toSec = Math.floor(endDate.getTime() / 1000) + 86400; // include end date
+
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?period1=${fromSec}&period2=${toSec}&interval=1d`;
+  const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } });
+  if (!res.ok) throw new Error(`Yahoo Finance returned HTTP ${res.status}`);
+  const json = await res.json();
+  const res0 = json.chart?.result?.[0];
+  if (!res0) throw new Error('No historical data available on Yahoo Finance.');
+
+  const timestamps = res0.timestamp || [];
+  const quote = res0.indicators?.quote?.[0] || {};
+  const rows = [];
+  const startIso = startDate.toISOString().slice(0, 10);
+  const endIso = endDate.toISOString().slice(0, 10);
+
+  for (let i = 0; i < timestamps.length; i++) {
+    if (quote.close[i] == null) continue;
+    const dateStr = new Date(timestamps[i] * 1000).toISOString().slice(0, 10);
+    if (dateStr >= startIso && dateStr <= endIso) {
+      rows.push({
+        date: dateStr,
+        open: Number((quote.open[i] ?? quote.close[i]).toFixed(2)),
+        high: Number((quote.high[i] ?? quote.close[i]).toFixed(2)),
+        low: Number((quote.low[i] ?? quote.close[i]).toFixed(2)),
+        close: Number(quote.close[i].toFixed(2)),
+        volume: Number(quote.volume[i] ?? 0),
+      });
+    }
+  }
+  return rows.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+async function fetchYahooIntraday(symbol) {
+  const ticker = getYahooTicker(symbol);
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=1d&interval=1m`;
+  const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } });
+  if (!res.ok) throw new Error(`Yahoo Finance intraday returned HTTP ${res.status}`);
+  const json = await res.json();
+  const res0 = json.chart?.result?.[0];
+  if (!res0) throw new Error('No intraday data available on Yahoo Finance.');
+
+  const timestamps = res0.timestamp || [];
+  const quotes = res0.indicators?.quote?.[0]?.close || [];
+  const points = [];
+  for (let i = 0; i < timestamps.length; i++) {
+    if (quotes[i] != null) {
+      points.push({
+        t: timestamps[i] * 1000,
+        price: Number(quotes[i].toFixed(2)),
+      });
+    }
+  }
+  return points;
+}
+
+async function fetchYahooQuote(symbol) {
+  const ticker = getYahooTicker(symbol);
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=1d&interval=1m`;
+  const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } });
+  if (!res.ok) throw new Error(`Yahoo Finance quote returned HTTP ${res.status}`);
+  const json = await res.json();
+  const res0 = json.chart?.result?.[0];
+  if (!res0) throw new Error('No quote data available on Yahoo Finance.');
+
+  const meta = res0.meta || {};
+  const lastPrice = meta.regularMarketPrice ?? meta.chartPreviousClose;
+  const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? lastPrice;
+  const change = lastPrice != null && prevClose != null ? lastPrice - prevClose : 0;
+  const pChange = prevClose ? (change / prevClose) * 100 : 0;
+
+  return {
+    symbol,
+    lastPrice: Number(lastPrice.toFixed(2)),
+    change: Number(change.toFixed(2)),
+    pChange: Number(pChange.toFixed(2)),
+    open: meta.regularMarketOpen ? Number(meta.regularMarketOpen.toFixed(2)) : undefined,
+    high: meta.regularMarketDayHigh ? Number(meta.regularMarketDayHigh.toFixed(2)) : undefined,
+    low: meta.regularMarketDayLow ? Number(meta.regularMarketDayLow.toFixed(2)) : undefined,
+    previousClose: Number(prevClose.toFixed(2)),
+    weekHigh52: meta.fiftyTwoWeekHigh ? Number(meta.fiftyTwoWeekHigh.toFixed(2)) : undefined,
+    weekLow52: meta.fiftyTwoWeekLow ? Number(meta.fiftyTwoWeekLow.toFixed(2)) : undefined,
+  };
+}
 
 // Normalize and resolve symbol
 function resolveSymbol(input) {
@@ -117,7 +195,6 @@ app.get('/api/search', (req, res) => {
   })).filter(idx => !query || idx.symbol.toLowerCase().includes(query) || idx.name.toLowerCase().includes(query));
 
   if (!query) {
-    // Return top popular stocks & indices when search box is empty
     const popularSymbols = ['NIFTY 50', 'NIFTY BANK', 'RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK', 'TMPV', 'TMCV', 'SBIN', 'ITC', 'BHARTIARTL', 'LT', 'M&M', 'ZOMATO'];
     const results = [];
     for (const sym of popularSymbols) {
@@ -168,7 +245,6 @@ app.get('/api/search', (req, res) => {
     ...stockName.slice(0, 15)
   ];
 
-  // Deduplicate by symbol
   const seen = new Set();
   const results = [];
   for (const r of combined) {
@@ -203,26 +279,27 @@ app.get('/api/historical', async (req, res) => {
 
     const byDate = new Map();
 
-    if (isIndex(symbol)) {
-      // Index Historical via charting endpoint
-      const token = INDEX_TOKENS[symbol] || '26000';
-      const chart = await nse.getEquityChartHistoricalData(symbol, { start, end }, token, 'Index', 'D', '1');
-      const dataArr = chart?.data || [];
-      for (const r of dataArr) {
-        if (!r.time) continue;
-        const dateKey = new Date(r.time).toISOString().slice(0, 10);
-        byDate.set(dateKey, {
-          date:   dateKey,
-          open:   r.open,
-          high:   r.high,
-          low:    r.low,
-          close:  r.close,
-          volume: r.volume || 0,
-        });
-      }
-    } else {
-      // Equity Historical
-      try {
+    // 1. Try NSE Official endpoints
+    let nseSuccess = false;
+    try {
+      if (isIndex(symbol)) {
+        const token = INDEX_TOKENS[symbol] || '26000';
+        const chart = await nse.getEquityChartHistoricalData(symbol, { start, end }, token, 'Index', 'D', '1');
+        const dataArr = chart?.data || [];
+        for (const r of dataArr) {
+          if (!r.time) continue;
+          const dateKey = new Date(r.time).toISOString().slice(0, 10);
+          byDate.set(dateKey, {
+            date:   dateKey,
+            open:   r.open,
+            high:   r.high,
+            low:    r.low,
+            close:  r.close,
+            volume: r.volume || 0,
+          });
+        }
+        if (byDate.size > 0) nseSuccess = true;
+      } else {
         const chunks = await nse.getEquityHistoricalData(symbol, { start, end });
         for (const chunk of chunks) {
           for (const r of (chunk.data || [])) {
@@ -243,30 +320,24 @@ app.get('/api/historical', async (req, res) => {
             });
           }
         }
-      } catch (equityErr) {
-        // Fallback to charting endpoint if equity quote API fails
-        try {
-          const chart = await nse.getEquityChartHistoricalData(symbol, { start, end }, undefined, 'Equity', 'D', '1');
-          const dataArr = chart?.data || [];
-          for (const r of dataArr) {
-            if (!r.time) continue;
-            const dateKey = new Date(r.time).toISOString().slice(0, 10);
-            byDate.set(dateKey, {
-              date:   dateKey,
-              open:   r.open,
-              high:   r.high,
-              low:    r.low,
-              close:  r.close,
-              volume: r.volume || 0,
-            });
-          }
-        } catch (chartErr) {
-          throw equityErr;
-        }
+        if (byDate.size > 0) nseSuccess = true;
       }
+    } catch (nseErr) {
+      console.warn(`NSE official historical failed for ${symbol} (${nseErr.message}), falling back to Yahoo Finance.`);
     }
 
-    const rows = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+    // 2. Fallback to Yahoo Finance if NSE was blocked (e.g. 403 on Vercel) or returned 0 rows
+    let rows = [];
+    if (nseSuccess && byDate.size > 0) {
+      rows = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+    } else {
+      rows = await fetchYahooHistorical(symbol, start, end);
+    }
+
+    if (!rows.length) {
+      return res.status(404).json({ error: `No trading data found for ${symbol} in this range.` });
+    }
+
     historicalCache.set(cacheKey, { ts: Date.now(), rows });
     res.json({ symbol, rows });
   } catch (e) {
@@ -284,23 +355,34 @@ app.get('/api/intraday', async (req, res) => {
       return res.status(400).json({ error: 'Enter a valid NSE symbol, e.g. RELIANCE, TCS, or NIFTY 50.' });
 
     let pts = [];
-    if (isIndex(symbol)) {
-      const data = await nse.getIndexIntradayData(symbol);
-      pts = data.grapthData || data.graphData || [];
+
+    // 1. Try NSE Intraday
+    try {
+      if (isIndex(symbol)) {
+        const data = await nse.getIndexIntradayData(symbol);
+        pts = data.grapthData || data.graphData || [];
+      } else {
+        const data = await nse.getEquityIntradayData(symbol);
+        pts = data.grapthData || data.graphData || [];
+      }
+
+      if (pts.length && new Date(pts[0][0]).getUTCHours() >= 8) {
+        pts = pts.map(([t, p]) => [t - 5.5 * 3600 * 1000, p]);
+      }
+    } catch (nseErr) {
+      console.warn(`NSE official intraday failed for ${symbol} (${nseErr.message}), falling back to Yahoo Finance.`);
+    }
+
+    // 2. Fallback to Yahoo Finance intraday if NSE was blocked on cloud/Vercel
+    if (pts && pts.length > 0) {
+      res.json({ symbol, points: pts.map(([t, p]) => ({ t, price: p })) });
     } else {
-      const data = await nse.getEquityIntradayData(symbol);
-      pts = data.grapthData || data.graphData || [];
+      const yahooPoints = await fetchYahooIntraday(symbol);
+      res.json({ symbol, points: yahooPoints });
     }
-
-    // Normalise IST clock time if returned in UTC shifted format
-    if (pts.length && new Date(pts[0][0]).getUTCHours() >= 8) {
-      pts = pts.map(([t, p]) => [t - 5.5 * 3600 * 1000, p]);
-    }
-
-    res.json({ symbol, points: pts.map(([t, p]) => ({ t, price: p })) });
   } catch (e) {
     console.error('Error fetching intraday:', e.message);
-    res.status(500).json({ error: e.message || 'Could not fetch data from NSE.' });
+    res.status(500).json({ error: e.message || 'Could not fetch intraday data.' });
   }
 });
 
@@ -312,42 +394,52 @@ app.get('/api/quote', async (req, res) => {
     if (!validSymbol(symbol))
       return res.status(400).json({ error: 'Invalid symbol.' });
 
-    if (isIndex(symbol)) {
-      const allIndices = await nse.getAllIndices();
-      const match = (allIndices?.data || []).find(
-        x => (x.indexSymbol || '').toUpperCase() === symbol || (x.index || '').toUpperCase() === symbol
-      );
-      if (match) {
-        return res.json({
-          symbol,
-          lastPrice:     match.last,
-          change:        match.variation,
-          pChange:       match.percentChange,
-          open:          match.open,
-          high:          match.high,
-          low:           match.low,
-          previousClose: match.previousClose,
-          weekHigh52:    match.yearHigh,
-          weekLow52:     match.yearLow,
-        });
+    // 1. Try NSE official quote
+    try {
+      if (isIndex(symbol)) {
+        const allIndices = await nse.getAllIndices();
+        const match = (allIndices?.data || []).find(
+          x => (x.indexSymbol || '').toUpperCase() === symbol || (x.index || '').toUpperCase() === symbol
+        );
+        if (match && match.last != null) {
+          return res.json({
+            symbol,
+            lastPrice:     match.last,
+            change:        match.variation,
+            pChange:       match.percentChange,
+            open:          match.open,
+            high:          match.high,
+            low:           match.low,
+            previousClose: match.previousClose,
+            weekHigh52:    match.yearHigh,
+            weekLow52:     match.yearLow,
+          });
+        }
+      } else {
+        const data = await nse.getEquityDetails(symbol);
+        const info = data?.priceInfo || {};
+        if (info.lastPrice != null) {
+          return res.json({
+            symbol,
+            lastPrice:       info.lastPrice,
+            change:          info.change,
+            pChange:         info.pChange,
+            open:            info.open,
+            high:            info.intraDayHighLow?.max,
+            low:             info.intraDayHighLow?.min,
+            previousClose:   info.previousClose,
+            weekHigh52:      info.weekHighLow?.max,
+            weekLow52:       info.weekHighLow?.min,
+          });
+        }
       }
+    } catch (nseErr) {
+      console.warn(`NSE official quote failed for ${symbol} (${nseErr.message}), falling back to Yahoo Finance.`);
     }
 
-    // Equity quote
-    const data = await nse.getEquityDetails(symbol);
-    const info = data?.priceInfo || {};
-    res.json({
-      symbol,
-      lastPrice:       info.lastPrice,
-      change:          info.change,
-      pChange:         info.pChange,
-      open:            info.open,
-      high:            info.intraDayHighLow?.max,
-      low:             info.intraDayHighLow?.min,
-      previousClose:   info.previousClose,
-      weekHigh52:      info.weekHighLow?.max,
-      weekLow52:       info.weekHighLow?.min,
-    });
+    // 2. Fallback to Yahoo Finance quote if NSE blocked/errored on Vercel
+    const yQuote = await fetchYahooQuote(symbol);
+    res.json(yQuote);
   } catch (e) {
     console.error('Error fetching quote for', req.query.symbol, ':', e.message);
     res.status(500).json({ error: e.message || 'Could not fetch quote.' });
@@ -355,5 +447,8 @@ app.get('/api/quote', async (req, res) => {
 });
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(`NSE Chart running at http://localhost:${port}`));
+if (require.main === module) {
+  app.listen(port, () => console.log(`NSE Chart running at http://localhost:${port}`));
+}
 
+module.exports = app;
