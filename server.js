@@ -116,27 +116,96 @@ async function fetchYahooHistorical(symbol, startDate, endDate) {
   return rows.sort((a, b) => a.date.localeCompare(b.date));
 }
 
-async function fetchYahooIntraday(symbol) {
+async function fetchYahooIntraday(symbol, targetDate) {
   const ticker = getYahooTicker(symbol);
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=1d&interval=1m`;
-  const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } });
-  if (!res.ok) throw new Error(`Yahoo Finance intraday returned HTTP ${res.status}`);
-  const json = await res.json();
-  const res0 = json.chart?.result?.[0];
-  if (!res0) throw new Error('No intraday data available on Yahoo Finance.');
+  const fmtDate = (ms) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(ms);
+  const todayIST = fmtDate(Date.now());
 
-  const timestamps = res0.timestamp || [];
-  const quotes = res0.indicators?.quote?.[0]?.close || [];
-  const points = [];
-  for (let i = 0; i < timestamps.length; i++) {
-    if (quotes[i] != null) {
-      points.push({
-        t: timestamps[i] * 1000,
-        price: Number(quotes[i].toFixed(2)),
-      });
-    }
+  // 1. If no specific target date, or if targetDate is today, try current 1-day range first
+  if (!targetDate || targetDate === todayIST) {
+    try {
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=1d&interval=1m`;
+      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } });
+      if (res.ok) {
+        const json = await res.json();
+        const res0 = json.chart?.result?.[0];
+        if (res0) {
+          const timestamps = res0.timestamp || [];
+          const quote = res0.indicators?.quote?.[0] || {};
+          const closes = quote.close || [];
+          const opens = quote.open || [];
+          const highs = quote.high || [];
+          const lows = quote.low || [];
+          const volumes = quote.volume || [];
+          const points = [];
+          for (let i = 0; i < timestamps.length; i++) {
+            if (closes[i] != null) {
+              const ms = timestamps[i] * 1000;
+              points.push({
+                t: ms,
+                price: Number(closes[i].toFixed(2)),
+                open: Number((opens[i] ?? closes[i]).toFixed(2)),
+                high: Number((highs[i] ?? closes[i]).toFixed(2)),
+                low: Number((lows[i] ?? closes[i]).toFixed(2)),
+                close: Number(closes[i].toFixed(2)),
+                volume: Number(volumes[i] ?? 0),
+              });
+            }
+          }
+          if (points.length > 0) {
+            const detectedDate = fmtDate(points[0].t);
+            return { date: detectedDate, interval: '1m', points };
+          }
+        }
+      }
+    } catch (_) {}
   }
-  return points;
+
+  // 2. Specific date requested (or today had 0 points from range=1d)
+  const reqDate = targetDate || todayIST;
+  const dStart = Math.floor(new Date(reqDate + 'T00:00:00+05:30').getTime() / 1000);
+  const dEnd = Math.floor(new Date(reqDate + 'T23:59:59+05:30').getTime() / 1000);
+
+  const intervals = ['1m', '2m', '5m', '15m'];
+  for (const interval of intervals) {
+    try {
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?period1=${dStart}&period2=${dEnd}&interval=${interval}`;
+      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } });
+      if (!res.ok) continue;
+      const json = await res.json();
+      const res0 = json.chart?.result?.[0];
+      if (!res0) continue;
+
+      const timestamps = res0.timestamp || [];
+      const quote = res0.indicators?.quote?.[0] || {};
+      const closes = quote.close || [];
+      const opens = quote.open || [];
+      const highs = quote.high || [];
+      const lows = quote.low || [];
+      const volumes = quote.volume || [];
+
+      const points = [];
+      for (let i = 0; i < timestamps.length; i++) {
+        const ms = timestamps[i] * 1000;
+        if (closes[i] != null && fmtDate(ms) === reqDate) {
+          points.push({
+            t: ms,
+            price: Number(closes[i].toFixed(2)),
+            open: Number((opens[i] ?? closes[i]).toFixed(2)),
+            high: Number((highs[i] ?? closes[i]).toFixed(2)),
+            low: Number((lows[i] ?? closes[i]).toFixed(2)),
+            close: Number(closes[i].toFixed(2)),
+            volume: Number(volumes[i] ?? 0),
+          });
+        }
+      }
+      if (points.length > 0) {
+        return { date: reqDate, interval, points };
+      }
+    } catch (_) {}
+  }
+
+  return { date: reqDate, interval: null, points: [] };
 }
 
 async function fetchYahooQuote(symbol) {
@@ -354,32 +423,56 @@ app.get('/api/intraday', async (req, res) => {
     if (!validSymbol(symbol))
       return res.status(400).json({ error: 'Enter a valid NSE symbol, e.g. RELIANCE, TCS, or NIFTY 50.' });
 
+    const targetDate = req.query.date ? String(req.query.date).trim() : '';
+    const fmtDate = (ms) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(ms);
+    const todayIST = fmtDate(Date.now());
+    const isToday = !targetDate || targetDate === todayIST;
+
     let pts = [];
 
-    // 1. Try NSE Intraday
-    try {
-      if (isIndex(symbol)) {
-        const data = await nse.getIndexIntradayData(symbol);
-        pts = data.grapthData || data.graphData || [];
-      } else {
-        const data = await nse.getEquityIntradayData(symbol);
-        pts = data.grapthData || data.graphData || [];
-      }
+    // 1. If today is requested, attempt NSE official first (if not on blocked IP)
+    if (isToday) {
+      try {
+        if (isIndex(symbol)) {
+          const data = await nse.getIndexIntradayData(symbol);
+          pts = data.grapthData || data.graphData || [];
+        } else {
+          const data = await nse.getEquityIntradayData(symbol);
+          pts = data.grapthData || data.graphData || [];
+        }
 
-      if (pts.length && new Date(pts[0][0]).getUTCHours() >= 8) {
-        pts = pts.map(([t, p]) => [t - 5.5 * 3600 * 1000, p]);
+        if (pts.length && new Date(pts[0][0]).getUTCHours() >= 8) {
+          pts = pts.map(([t, p]) => [t - 5.5 * 3600 * 1000, p]);
+        }
+      } catch (nseErr) {
+        console.warn(`NSE official intraday failed for ${symbol} (${nseErr.message}), falling back to Yahoo Finance.`);
       }
-    } catch (nseErr) {
-      console.warn(`NSE official intraday failed for ${symbol} (${nseErr.message}), falling back to Yahoo Finance.`);
     }
 
-    // 2. Fallback to Yahoo Finance intraday if NSE was blocked on cloud/Vercel
     if (pts && pts.length > 0) {
-      res.json({ symbol, points: pts.map(([t, p]) => ({ t, price: p })) });
-    } else {
-      const yahooPoints = await fetchYahooIntraday(symbol);
-      res.json({ symbol, points: yahooPoints });
+      return res.json({
+        symbol,
+        date: todayIST,
+        interval: '1m',
+        points: pts.map(([t, p]) => ({ t, price: p, open: p, high: p, low: p, close: p })),
+      });
     }
+
+    // 2. Fallback to Yahoo Finance intraday (works for today and historical sessions up to ~60 days)
+    const result = await fetchYahooIntraday(symbol, targetDate);
+    if (!result.points || result.points.length === 0) {
+      const msg = targetDate
+        ? `No intraday trading data found for ${targetDate}. The market may have been closed on this date (weekend or trading holiday), or the date is beyond available intraday history (~60 days).`
+        : `No intraday data available right now. Market might be closed.`;
+      return res.status(404).json({ error: msg });
+    }
+
+    res.json({
+      symbol,
+      date: result.date,
+      interval: result.interval,
+      points: result.points,
+    });
   } catch (e) {
     console.error('Error fetching intraday:', e.message);
     res.status(500).json({ error: e.message || 'Could not fetch intraday data.' });

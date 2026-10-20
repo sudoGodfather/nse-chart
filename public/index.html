@@ -627,6 +627,17 @@ body::before {
 
       <!-- Intraday controls -->
       <div id="intraControls" hidden>
+        <p class="section-title">Select Date</p>
+        <div class="field">
+          <label for="intraDate">Session Date</label>
+          <input type="date" id="intraDate">
+        </div>
+
+        <div class="presets" style="margin-top: 6px; margin-bottom: 14px;">
+          <button type="button" class="preset-btn active-preset" id="intraBtnToday">Today</button>
+          <button type="button" class="preset-btn" id="intraBtnPrev">Previous Day</button>
+        </div>
+
         <p class="section-title">Time Range (IST)</p>
         <div class="field">
           <label for="timeFrom">From</label>
@@ -752,8 +763,41 @@ function setRange(days, autoTrigger = false) {
 // Initial 6M range
 setRange(182, false);
 
-// Preset button handlers
-document.querySelectorAll('.preset-btn').forEach(b => {
+// Intraday date default setup
+const todayISTStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+$('intraDate').value = todayISTStr;
+$('intraDate').max = todayISTStr;
+
+$('intraBtnToday').addEventListener('click', () => {
+  $('intraDate').value = todayISTStr;
+  $('intraBtnToday').classList.add('active-preset');
+  $('intraBtnPrev').classList.remove('active-preset');
+  $('chartForm').dispatchEvent(new Event('submit'));
+});
+
+$('intraBtnPrev').addEventListener('click', () => {
+  const d = new Date();
+  let offset = 1;
+  const day = d.getDay();
+  if (day === 1) offset = 3;      // Monday -> Friday
+  else if (day === 0) offset = 2; // Sunday -> Friday
+  d.setDate(d.getDate() - offset);
+  const prevStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+  $('intraDate').value = prevStr;
+  $('intraBtnPrev').classList.add('active-preset');
+  $('intraBtnToday').classList.remove('active-preset');
+  $('chartForm').dispatchEvent(new Event('submit'));
+});
+
+$('intraDate').addEventListener('change', () => {
+  const val = $('intraDate').value;
+  $('intraBtnToday').classList.toggle('active-preset', val === todayISTStr);
+  $('intraBtnPrev').classList.remove('active-preset');
+  $('chartForm').dispatchEvent(new Event('submit'));
+});
+
+// Daily preset button handlers
+document.querySelectorAll('#dailyControls .preset-btn').forEach(b => {
   b.addEventListener('click', () => {
     setRange(+b.dataset.days, true);
   });
@@ -777,8 +821,8 @@ $('modeIntra').addEventListener('click', () => {
   $('modeDaily').classList.remove('active');
   $('dailyControls').hidden = true;
   $('intraControls').hidden = false;
-  $('chartTypePicker').hidden = true; // Intraday uses line
-  $('hintText').textContent = 'Minute-level prices for today\'s session (IST). NSE only provides data for the current session.';
+  $('chartTypePicker').hidden = false; // Candlestick, OHLC, Line all supported for Intraday!
+  $('hintText').textContent = 'Intraday minute-level prices (IST). Choose any session date from the past ~60 days.';
   $('chartForm').dispatchEvent(new Event('submit'));
 });
 
@@ -789,9 +833,11 @@ document.querySelectorAll('.ct-btn').forEach(b => {
     b.classList.add('active');
     chartType = b.dataset.type;
 
-    // If we already have current rows loaded, render instantly!
+    // If we already have current rows/points loaded, render instantly!
     if (mode === 'daily' && currentRows.length) {
       renderDailyChart(currentRows);
+    } else if (mode === 'intraday' && currentPoints.length) {
+      renderIntradayChart(currentPoints, currentIntraMeta);
     }
   });
 });
@@ -1176,9 +1222,11 @@ function renderDailyChart(rows) {
   showState('chart');
 }
 
-// ── Intraday Data Loader ──────────────────────────────────────────
+let currentIntraMeta = null;
+
 async function loadIntraday(symbol) {
-  const res = await fetch(`/api/intraday?symbol=${encodeURIComponent(symbol)}`);
+  const targetDate = $('intraDate').value || todayISTStr;
+  const res = await fetch(`/api/intraday?symbol=${encodeURIComponent(symbol)}&date=${encodeURIComponent(targetDate)}`);
   const json = await res.json();
   if (!res.ok) throw new Error(json.error || 'Failed to fetch intraday data');
 
@@ -1188,14 +1236,18 @@ async function loadIntraday(symbol) {
     const t = istTime(p.t);
     return t >= from && t <= to;
   });
-  if (!pts.length) throw new Error(`No intraday data between ${from} and ${to}. Market might be closed.`);
+  if (!pts.length) throw new Error(`No intraday data between ${from} and ${to} for ${json.date || targetDate}. Market might be closed.`);
 
   currentPoints = pts;
-  renderIntradayChart(currentPoints);
+  currentIntraMeta = {
+    date: json.date || targetDate,
+    interval: json.interval || '1m',
+  };
+  renderIntradayChart(currentPoints, currentIntraMeta);
   updateLiveQuote(symbol);
 }
 
-function renderIntradayChart(pts) {
+function renderIntradayChart(pts, meta) {
   const chart = getOrCreateChart();
 
   if (mainSeries) {
@@ -1211,9 +1263,13 @@ function renderIntradayChart(pts) {
     timeScale: { timeVisible: true }
   });
 
-  const prices = pts.map(p => Number(p.price));
-  const first  = prices[0];
-  const last   = prices[prices.length - 1];
+  const closes = pts.map(p => Number(p.close != null ? p.close : p.price));
+  const highs  = pts.map(p => Number(p.high != null ? p.high : (p.price != null ? p.price : p.close)));
+  const lows   = pts.map(p => Number(p.low != null ? p.low : (p.price != null ? p.price : p.close)));
+  const opens  = pts.map(p => Number(p.open != null ? p.open : (p.price != null ? p.price : p.close)));
+
+  const first  = closes[0];
+  const last   = closes[closes.length - 1];
   const diff   = last - first;
   const pct    = (diff / first) * 100;
 
@@ -1222,36 +1278,100 @@ function renderIntradayChart(pts) {
   $('priceBig').textContent = inr(last);
   $('priceChg').textContent = `${diff >= 0 ? '+' : ''}${diff.toFixed(2)} (${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%)`;
   $('priceChg').className = 'price-chg ' + (diff >= 0 ? 'pos' : 'neg');
-  $('priceDate').textContent = `Today, ${$('timeFrom').value}–${$('timeTo').value} IST · ${pts.length} bars`;
-  $('rangeLabel').textContent = `${pts.length} minute bars`;
-  $('chartHeaderTitle').textContent = 'Intraday Price Line';
+
+  const dateDisplay = meta?.date || $('intraDate').value || 'Today';
+  const intervalDisplay = meta?.interval ? `(${meta.interval})` : '';
+  $('priceDate').textContent = `${dateDisplay}, ${$('timeFrom').value}–${$('timeTo').value} IST · ${pts.length} bars ${intervalDisplay}`;
+  $('rangeLabel').textContent = `${pts.length} bars ${intervalDisplay}`;
+  $('chartHeaderTitle').textContent = chartType === 'line' ? 'Intraday Price Line (Area)' : chartType === 'ohlc' ? 'Intraday OHLC Bars' : 'Intraday Candlestick Chart';
 
   renderStats([
-    { k: 'High',   v: inr(Math.max(...prices)), cls: '' },
-    { k: 'Low',    v: inr(Math.min(...prices)), cls: '' },
+    { k: 'High',   v: inr(Math.max(...highs)), cls: '' },
+    { k: 'Low',    v: inr(Math.min(...lows)), cls: '' },
     { k: 'Change', v: `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`, cls: pct >= 0 ? 'pos' : 'neg' },
     { k: 'Data Bars', v: pts.length, cls: '' },
+    { k: 'Resolution', v: meta?.interval || '1m', cls: '' },
   ]);
 
-  const isUp = last >= first;
-  mainSeries = chart.addSeries(LightweightCharts.AreaSeries, {
-    topColor: isUp ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.35)',
-    bottomColor: 'rgba(0,0,0,0)',
-    lineColor: isUp ? '#22c55e' : '#ef4444',
-    lineWidth: 2,
-  });
-
   const IST_OFFSET_SECONDS = 19800; // 5.5 hours in seconds (IST UTC+5:30)
-  const lineData = [];
+  const cleanPts = [];
   let lastTime = -Infinity;
   for (const p of pts) {
     const tSec = Math.floor(p.t / 1000) + IST_OFFSET_SECONDS;
     if (tSec > lastTime) {
-      lineData.push({ time: tSec, value: Number(p.price) });
+      cleanPts.push({
+        time: tSec,
+        open: Number(p.open != null ? p.open : (p.price != null ? p.price : p.close)),
+        high: Number(p.high != null ? p.high : (p.price != null ? p.price : p.close)),
+        low:  Number(p.low  != null ? p.low  : (p.price != null ? p.price : p.close)),
+        close: Number(p.close != null ? p.close : p.price),
+        value: Number(p.price != null ? p.price : p.close),
+        volume: Number(p.volume || 0),
+      });
       lastTime = tSec;
     }
   }
-  mainSeries.setData(lineData);
+
+  if (chartType === 'candlestick') {
+    mainSeries = chart.addSeries(LightweightCharts.CandlestickSeries, {
+      upColor: '#22c55e',
+      downColor: '#ef4444',
+      borderVisible: false,
+      wickUpColor: '#22c55e',
+      wickDownColor: '#ef4444',
+    });
+    mainSeries.setData(cleanPts.map(p => ({
+      time: p.time,
+      open: p.open,
+      high: p.high,
+      low: p.low,
+      close: p.close,
+    })));
+  } else if (chartType === 'ohlc') {
+    mainSeries = chart.addSeries(LightweightCharts.BarSeries, {
+      upColor: '#22c55e',
+      downColor: '#ef4444',
+    });
+    mainSeries.setData(cleanPts.map(p => ({
+      time: p.time,
+      open: p.open,
+      high: p.high,
+      low: p.low,
+      close: p.close,
+    })));
+  } else {
+    const isUp = last >= first;
+    mainSeries = chart.addSeries(LightweightCharts.AreaSeries, {
+      topColor: isUp ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.35)',
+      bottomColor: 'rgba(0,0,0,0)',
+      lineColor: isUp ? '#22c55e' : '#ef4444',
+      lineWidth: 2,
+    });
+    mainSeries.setData(cleanPts.map(p => ({
+      time: p.time,
+      value: p.value,
+    })));
+  }
+
+  // Add Volume histogram if volume exists
+  const hasVolume = cleanPts.some(p => p.volume > 0);
+  if (hasVolume) {
+    volumeSeries = chart.addSeries(LightweightCharts.HistogramSeries, {
+      priceFormat: { type: 'volume' },
+      priceScaleId: '', // Overlay pane
+    });
+    volumeSeries.priceScale().applyOptions({
+      scaleMargins: {
+        top: 0.8, // Take bottom 20%
+        bottom: 0,
+      },
+    });
+    volumeSeries.setData(cleanPts.map(p => ({
+      time: p.time,
+      value: p.volume,
+      color: p.close >= p.open ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)'
+    })));
+  }
 
   chart.timeScale().fitContent();
   showState('chart');
