@@ -968,10 +968,13 @@ function getOrCreateChart() {
     } else if (typeof param.time === 'object') {
       dateStr = `${param.time.year}-${String(param.time.month).padStart(2,'0')}-${String(param.time.day).padStart(2,'0')}`;
     } else {
-      dateStr = new Date(param.time * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const d = new Date(param.time * 1000);
+      const hh = String(d.getUTCHours()).padStart(2, '0');
+      const mm = String(d.getUTCMinutes()).padStart(2, '0');
+      dateStr = `${hh}:${mm} IST`;
     }
 
-    $('hDate').innerHTML = `Date: <span>${dateStr}</span>`;
+    $('hDate').innerHTML = `${mode === 'intraday' ? 'Time' : 'Date'}: <span>${dateStr}</span>`;
     if (data.open !== undefined) {
       $('hOpen').innerHTML = `O: <span>${inr(data.open)}</span>`;
       $('hHigh').innerHTML = `H: <span>${inr(data.high)}</span>`;
@@ -1238,10 +1241,16 @@ function renderIntradayChart(pts) {
     lineWidth: 2,
   });
 
-  const lineData = pts.map(p => ({
-    time: Math.floor(p.t / 1000),
-    value: Number(p.price),
-  }));
+  const IST_OFFSET_SECONDS = 19800; // 5.5 hours in seconds (IST UTC+5:30)
+  const lineData = [];
+  let lastTime = -Infinity;
+  for (const p of pts) {
+    const tSec = Math.floor(p.t / 1000) + IST_OFFSET_SECONDS;
+    if (tSec > lastTime) {
+      lineData.push({ time: tSec, value: Number(p.price) });
+      lastTime = tSec;
+    }
+  }
   mainSeries.setData(lineData);
 
   chart.timeScale().fitContent();
